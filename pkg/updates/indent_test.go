@@ -1,9 +1,10 @@
-package main
+package updates
 
 import (
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
-	"testing"
 )
 
 const yamlFixture1 = `# comment

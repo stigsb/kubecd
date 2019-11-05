@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-const testIpAddress = "1.2.3.4"
-
 func TestLookupValue(t *testing.T) {
 	values := map[string]interface{}{
 		"foo": map[string]interface{}{
@@ -43,33 +41,6 @@ func TestLookupValue(t *testing.T) {
 			assert.Equal(t, expectedResult, *result.(*string))
 		}
 	}
-}
-
-func TestResolveGceAddressValue(t *testing.T) {
-	oldRunner := runner
-	defer func() { runner = oldRunner }()
-	runner = exec.TestRunner{Output: []byte(testIpAddress)}
-	zone := "us-central1-a"
-	cluster := model.Cluster{
-		Name: "kcd-clustername",
-		Provider: model.Provider{
-			GKE: &model.GkeProvider{
-				Project:     "test-project",
-				Zone:        &zone,
-				ClusterName: "gke-clustername",
-			},
-		},
-	}
-	env := &model.Environment{
-		Cluster: &cluster,
-	}
-	address := &model.GceAddressValueRef{
-		Name:     "my-address",
-		IsGlobal: false,
-	}
-	out, err := ResolveGceAddressValue(address, env)
-	assert.NoError(t, err)
-	assert.Equal(t, testIpAddress, string(out))
 }
 
 // TestHelperProcess is required boilerplate (one per package) for using exec.TestRunner

@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"fmt"
+
 	"github.com/zedge/kubecd/pkg/model"
 )
 
@@ -20,4 +22,8 @@ func (p *MinikubeClusterProvider) GetUserName() string {
 
 func (p *MinikubeClusterProvider) GetNamespace(env *model.Environment) string {
 	return env.KubeNamespace
+}
+
+func (p *MinikubeClusterProvider) LookupValueFrom(valueRef *model.ChartValueRef) (string, bool, error) {
+	return "", false, fmt.Errorf("not implemented for Minikube")
 }
