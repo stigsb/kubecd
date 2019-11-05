@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -17,9 +18,13 @@ type TestRunner struct {
 }
 
 func (r TestRunner) Run(command string, args ...string) ([]byte, error) {
-	cs := []string{"-test.run=TestHelperProcess", "--", command}
-	cs = append(cs, args...)
-	cmd := osexec.Command(os.Args[0], cs...)
+	return r.RunContext(context.Background(), command, args...)
+}
+
+func (r TestRunner) RunContext(ctx context.Context, command string, args ...string) ([]byte, error) {
+	testHelperArgs := []string{"-test.run", "^TestHelperProcess$", "--", command}
+	testHelperArgs = append(testHelperArgs, args...)
+	cmd := osexec.CommandContext(ctx, os.Args[0], testHelperArgs...)
 	cmd.Env = []string{
 		"GO_WANT_HELPER_PROCESS=1",
 		"GO_HELPER_MOCK_STDOUT=" + string(r.Output), // may need to base64 encode here?
@@ -51,7 +56,7 @@ func InsideHelperProcess() {
 	}
 	if expCmdEnv, found := os.LookupEnv("GO_HELPER_EXPECTED_COMMAND_JSON"); found {
 		var expectedCommand []string
-		actualCommand := os.Args[3:]
+		actualCommand := os.Args[4:] // look for "testHelperArgs" above
 		err = json.Unmarshal([]byte(expCmdEnv), &expectedCommand)
 		if err != nil {
 			panic(err)
