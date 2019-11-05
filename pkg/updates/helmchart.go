@@ -19,10 +19,13 @@ package updates
 
 import (
 	"fmt"
+	"os"
+
+	"github.com/pkg/errors"
+
 	"github.com/kubecd/kubecd/pkg/helm"
 	"github.com/kubecd/kubecd/pkg/image"
 	"github.com/kubecd/kubecd/pkg/model"
-	"github.com/pkg/errors"
 )
 
 type ImageUpdate struct {
@@ -61,7 +64,7 @@ func FindImageUpdatesForRelease(release *model.Release, tagIndex TagIndex) ([]Im
 		}
 		imageTags := tagIndex.GetTags(imageRef)
 		if imageTags == nil {
-			//fmt.Printf("env:%s release:%s imageTags == nil, tagIndex=%#v, imageRef=%#v\n", release.Environment.Name, release.Name, tagIndex, *imageRef)
+			_, _ = fmt.Fprintf(os.Stderr, "WARNING: could not resolve image tags for release %q in env %q\n", release.Name, release.Environment.Name)
 			continue
 		}
 		var currentTag image.TimestampedTag
@@ -113,7 +116,12 @@ releaseLoop:
 				//fmt.Printf("release %q has no trigger\n", release.Name)
 				continue
 			}
-			repo := helm.GetImageRefFromImageTrigger(t.Image, values).WithoutTag()
+			imgRef := helm.GetImageRefFromImageTrigger(t.Image, values)
+			if imgRef == nil {
+				_, _ = fmt.Fprintf(os.Stderr, "WARNING: could not resolve image for release %q in env %q\n", release.Name, release.Environment.Name)
+				continue
+			}
+			repo := imgRef.WithoutTag()
 			//fmt.Printf("release %q repo: %q\n", release.Name, repo)
 			if _, found := result[repo]; !found {
 				result[repo] = make([]*model.Release, 0)

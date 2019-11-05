@@ -18,68 +18,45 @@
 package helm
 
 import (
-	"crypto/sha1"
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/user"
 	"path"
-	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/ghodss/yaml"
 
-	"github.com/kubecd/kubecd/pkg/image"
-
+	"github.com/kubecd/kubecd/pkg/cache"
 	"github.com/kubecd/kubecd/pkg/exec"
+	"github.com/kubecd/kubecd/pkg/image"
 	"github.com/kubecd/kubecd/pkg/model"
+	"github.com/kubecd/kubecd/pkg/provider"
 )
 
 var runner exec.Runner = exec.RealRunner{}
 
-func inspectCacheDir() string {
-	dir := os.Getenv("KUBECD_CACHE")
-	if dir == "" {
-		me, _ := user.Current()
-		dir = me.HomeDir
-	}
-	return filepath.Join(dir, ".kubecd", "cache", "inspect")
-}
-
 func pathExists(path string) bool {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
-			return true
+			return false
 		}
 		return false
 	}
 	return true
 }
 
-// InspectChart :
 func InspectChart(chartReference, chartVersion string) ([]byte, error) {
-	h := sha1.New()
-	h.Write([]byte(chartReference))
-	h.Write([]byte(chartVersion))
-	chartHash := fmt.Sprintf("%x", h.Sum(nil))
-	cacheDir := inspectCacheDir()
-	cacheFile := filepath.Join(cacheDir, chartHash)
-	if pathExists(cacheFile) {
-		data, err := ioutil.ReadFile(cacheFile)
-		if err != nil {
-			return nil, fmt.Errorf(`could not read %q: %v`, cacheFile, err)
-		}
+	inspectCache := cache.NewFileCache("inspect")
+	key := cache.Key(chartReference, chartVersion)
+	data := inspectCache.Get(key)
+	if data != nil {
 		return data, nil
 	}
 	out, err := runner.Run("helm", "inspect", chartReference, "--version", chartVersion)
 	if err != nil {
 		return nil, fmt.Errorf(`error while running "helm inspect": %v`, err)
 	}
-	err = ioutil.WriteFile(cacheFile, out, 0644)
-	if err != nil {
-		return nil, fmt.Errorf(`error while writing cache file: %v`, err)
-	}
+	inspectCache.Set(key, out)
 	return out, nil
 }
 
@@ -335,38 +312,18 @@ func ResolveValue(value model.ChartValue, env *model.Environment) (*model.ChartV
 	if env == nil || value.ValueFrom == nil {
 		return retVal, nil
 	}
-	if gceRes := value.ValueFrom.GceResource; gceRes != nil {
-		if gceRes.Address != nil {
-			addr, err := ResolveGceAddressValue(value.ValueFrom.GceResource.Address, env)
-			if err != nil {
-				return nil, err
-			}
-			retVal.Value = addr
-		}
+	prov, err := provider.GetClusterProvider(env.Cluster, false)
+	if err != nil {
+		return nil, err
+	}
+	resolvedValue, found, err := prov.LookupValueFrom(value.ValueFrom)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		retVal.Value = resolvedValue
 	}
 	return retVal, nil
-}
-
-var zoneToRegionRegexp = regexp.MustCompile(`-[a-z]$`)
-
-func ResolveGceAddressValue(address *model.GceAddressValueRef, env *model.Environment) (string, error) {
-	gke := env.GetCluster().Provider.GKE
-	argv := []string{"compute", "addresses", "describe", address.Name, "--format", "value(address)", "--project", gke.Project}
-	if address.IsGlobal {
-		argv = append(argv, "--global")
-	} else {
-		argv = append(argv, "--region")
-		if gke.Zone != nil {
-			argv = append(argv, zoneToRegionRegexp.ReplaceAllString(*gke.Zone, ""))
-		} else {
-			argv = append(argv, *gke.Region)
-		}
-	}
-	out, err := runner.Run("gcloud", argv...)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 func MergeValues(from map[string]interface{}, onto map[string]interface{}) map[string]interface{} {
@@ -470,7 +427,7 @@ func GetResolvedValues(release *model.Release) (map[string]interface{}, error) {
 	} else if release.Chart != nil && release.Chart.Reference != nil {
 		output, err := InspectChart(*release.Chart.Reference, *release.Chart.Version)
 		if err != nil {
-			return nil, fmt.Errorf(`failed to spect Helm chart %q version %q: %v`, *release.Chart.Reference, *release.Chart.Version, err)
+			return nil, fmt.Errorf(`failed to inspect Helm chart %q version %q: %v`, *release.Chart.Reference, *release.Chart.Version, err)
 		}
 		var chartDefaultValues map[string]interface{}
 		if err = yaml.Unmarshal(output, &chartDefaultValues); err != nil {

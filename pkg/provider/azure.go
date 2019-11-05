@@ -18,6 +18,8 @@
 package provider
 
 import (
+	"fmt"
+
 	"github.com/kubecd/kubecd/pkg/model"
 )
 
@@ -37,4 +39,9 @@ func (p *AksClusterProvider) GetUserName() string {
 
 func (p *AksClusterProvider) GetNamespace(env *model.Environment) string {
 	panic("implement me")
+}
+
+// LookupValueFrom returns a value, whether it was found and an error
+func (p *AksClusterProvider) LookupValueFrom(valueRef *model.ChartValueRef) (string, bool, error) {
+	return "", false, fmt.Errorf("not yet implemented for AKS")
 }

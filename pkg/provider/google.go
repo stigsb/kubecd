@@ -19,8 +19,13 @@ package provider
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
+
 	"github.com/kubecd/kubecd/pkg/model"
 )
+
+var zoneToRegionRegexp = regexp.MustCompile(`-[a-z]$`)
 
 type GkeClusterProvider struct{ baseClusterProvider }
 
@@ -56,4 +61,35 @@ func (p *GkeClusterProvider) GetUserName() string {
 
 func (p *GkeClusterProvider) GetNamespace(environment *model.Environment) string {
 	return environment.KubeNamespace
+}
+
+// LookupValueFrom returns a value, whether it was found and an error
+func (p *GkeClusterProvider) LookupValueFrom(valueRef *model.ChartValueRef) (string, bool, error) {
+	if gceRes := valueRef.GceResource; gceRes != nil {
+		if gceRes.Address != nil {
+			addr, err := p.lookupAddress(valueRef.GceResource.Address)
+			return addr, true, err
+		}
+	}
+	return "", false, nil
+}
+
+func (p *GkeClusterProvider) lookupAddress(ref *model.GceAddressValueRef) (string, error) {
+	gke := p.Provider.GKE
+	argv := []string{"compute", "addresses", "describe", ref.Name, "--format", "value(address)", "--project", gke.Project}
+	if ref.IsGlobal {
+		argv = append(argv, "--global")
+	} else {
+		argv = append(argv, "--region")
+		if gke.Zone != nil {
+			argv = append(argv, zoneToRegionRegexp.ReplaceAllString(*gke.Zone, ""))
+		} else {
+			argv = append(argv, *gke.Region)
+		}
+	}
+	out, err := cachedRunner.Run("gcloud", argv...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }

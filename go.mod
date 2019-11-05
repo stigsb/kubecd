@@ -3,6 +3,7 @@ module github.com/kubecd/kubecd
 go 1.12
 
 require (
+	cloud.google.com/go/pubsub v1.0.1
 	github.com/Masterminds/semver v1.4.2
 	github.com/bitfield/script v0.14.0
 	github.com/buildkite/interpolate v0.0.0-20181028012610-973457fa2b4c
@@ -26,6 +27,5 @@ require (
 	github.com/spf13/viper v1.4.0
 	github.com/stretchr/testify v1.3.0
 	golang.org/x/sys v0.0.0-20190626221950-04f50cda93cb // indirect
-	golang.org/x/text v0.3.2 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20190502103701-55513cacd4ae
 )

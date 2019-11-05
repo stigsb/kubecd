@@ -18,11 +18,9 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"regexp"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 
 	"github.com/kubecd/kubecd/pkg/image"
 	"github.com/kubecd/kubecd/pkg/model"
@@ -59,7 +57,7 @@ func init() {
 	rootCmd.AddCommand(observeCmd)
 	observeCmd.Flags().StringVarP(&observeImage, "image", "i", "", "a new image, including tag")
 	observeCmd.Flags().StringSliceVarP(&observeReleases, "releases", "r", []string{}, "limit the update to or more specific releases")
-	observeCmd.Flags().StringVar(&observeChart, "chart", "", "a new chart version")
+	observeCmd.Flags().StringVar(&observeChart, "chart", "", "a new chart version, format: REPO/CHART:VERSION")
 	observeCmd.Flags().BoolVar(&observePatch, "patch", false, "patch release files with updated tags")
 	observeCmd.Flags().BoolVar(&observeVerify, "verify", false, "verify that image:tag exists")
 }
@@ -123,74 +121,18 @@ func makeObserveReleaseFilters(args []string) []updates.ReleaseFilterFunc {
 	return filters
 }
 
-//func patchImageUpdates(releasesFile string, updates []kubecd.ImageUpdate) error {
-//	var modYaml interface{}
-//	data, err := ioutil.ReadFile(releasesFile)
-//	if err != nil {
-//		return errors.Wrapf(err, `error reading %q`, releasesFile)
-//	}
-//	err = yaml.Unmarshal(data, &modYaml)
-//	if err != nil {
-//		return errors.Wrapf(err, `error decoding yaml in %q`, releasesFile)
-//	}
-//	tmpReleases := modYaml.(map[interface{}]interface{})["releases"]
-//	if tmpReleases == nil {
-//		return fmt.Errorf(`%s: no "releases" found`, releasesFile)
-//	}
-//	releases, ok := tmpReleases.([]interface{})
-//	if !ok {
-//		return fmt.Errorf(`%s: "releases" not a list`, releasesFile)
-//	}
-//	for _, tmpRel := range releases {
-//		modRel := tmpRel.(map[interface{}]interface{})
-//		relName := modRel["name"].(string)
-//		for _, update := range updates {
-//			if relName != update.Release.Name {
-//				continue
-//			}
-//			if _, found := modRel["values"]; !found {
-//				modRel["values"] = make(map[interface{}]interface{})
-//			}
-//			foundVal := false
-//			values := modRel["values"].([]interface{})
-//			for _, tmpVal := range values {
-//				modVal := tmpVal.(map[string]interface{})
-//				if modVal["key"].(string) != update.TagValue {
-//					continue
-//				}
-//				modVal["value"] = update.NewTag
-//				foundVal = true
-//				break
-//			}
-//			if !foundVal {
-//				values = append(values, map[interface{}]interface{}{"key": update.TagValue, "value": update.NewTag})
-//			}
-//		}
-//	}
-//	if err = writeIndentedYamlToFile(releasesFile, modYaml); err != nil {
-//		return err
-//	}
-//	return nil
-//}
-
 func patchReleasesFilesMaybe(imageUpdates []updates.ImageUpdate, patch bool) error {
 	verb := "May"
 	if patch {
 		verb = "Will"
 	}
-	updatesPerFile := make(map[string][]updates.ImageUpdate)
 	for _, update := range imageUpdates {
 		fmt.Printf("%s update release %q image %q tag %s -> %s\n", verb, update.Release.Name, update.ImageRepo, update.OldTag, update.NewTag)
-		file := update.Release.FromFile
-		if _, found := updatesPerFile[file]; !found {
-			updatesPerFile[file] = make([]updates.ImageUpdate, 0)
-		}
-		updatesPerFile[file] = append(updatesPerFile[file], update)
 	}
 	if patch {
-		for file, fileUpdates := range updatesPerFile {
+		for file, fileUpdates := range updates.GroupImageUpdatesByReleasesFile(imageUpdates) {
 			fmt.Printf("Patching file: %s\n", file)
-			if err := patchImageUpdatesYamlNode(file, fileUpdates); err != nil {
+			if err := updates.PatchReleasesFiles(file, fileUpdates); err != nil {
 				return err
 			}
 		}
@@ -198,72 +140,20 @@ func patchReleasesFilesMaybe(imageUpdates []updates.ImageUpdate, patch bool) err
 	return nil
 }
 
-func patchImageUpdatesYamlNode(releasesFile string, imageUpdates []updates.ImageUpdate) error {
-	var doc yaml.Node
-	data, err := ioutil.ReadFile(releasesFile)
-	if err != nil {
-		return errors.Wrapf(err, `error reading %q`, releasesFile)
-	}
-	err = yaml.Unmarshal(data, &doc)
-	if err != nil {
-		return errors.Wrapf(err, `error decoding yaml in %q`, releasesFile)
-	}
-	releases := yamlNodeMapEntry(doc.Content[0], "releases")
-	if releases.Kind != yaml.SequenceNode {
-		return fmt.Errorf(`%s: "releases" is not a list`, releasesFile)
-	}
-	madeChanges := false
-	for _, release := range releases.Content {
-		name := yamlNodeMapEntry(release, "name")
-		if name == nil || name.Kind != yaml.ScalarNode {
-			continue
-		}
-		for _, update := range imageUpdates {
-			if update.Release.Name != name.Value {
-				continue
-			}
-			values := yamlNodeMapEntry(release, "values")
-			if values == nil {
-				continue
-			}
-			for _, chartValue := range values.Content {
-				key := yamlNodeMapEntry(chartValue, "key")
-				value := yamlNodeMapEntry(chartValue, "value")
-				if key == nil || value == nil {
-					continue
-				}
-				if key.Value == update.TagValue {
-					value.Value = update.NewTag
-					madeChanges = true
-				}
-			}
-		}
-	}
-	if !madeChanges {
-		return nil
-	}
-	return writeIndentedYamlToFile(releasesFile, &doc)
-}
-
-func yamlNodeMapEntry(node *yaml.Node, name string) *yaml.Node {
-	if node.Kind == yaml.MappingNode {
-		for i := 0; i < len(node.Content); i += 2 {
-			if node.Content[i].Kind == yaml.ScalarNode && node.Content[i].Value == name {
-				return node.Content[i+1]
-			}
-		}
-	}
-	return nil
-}
+var observeChartVersionRegex = regexp.MustCompile(`^([^/:]+/[^/:]+):(.+)$`)
 
 func observeChartVersion(kcdConfig *model.KubeCDConfig) error {
+	m := observeChartVersionRegex.FindStringSubmatch(observeChart)
+	if len(m) != 4 {
+		return fmt.Errorf(`--chart format must be "REPO/CHART:VERSION"", got %q`, observeChart)
+	}
 	return NotYetImplementedError("observe --chart")
 }
 
 func imageOrChart(image, chart *string) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if (*chart != "" && *image != "") || (*chart == "" && *image == "") {
-			return errors.New("must specify --image or --chart")
+			return fmt.Errorf("specify exactly one of --image and --chart")
 		}
 		return nil
 	}

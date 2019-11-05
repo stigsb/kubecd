@@ -18,6 +18,8 @@
 package provider
 
 import (
+	"fmt"
+
 	"github.com/kubecd/kubecd/pkg/model"
 )
 
@@ -44,4 +46,8 @@ func (p *DockerForDesktopClusterProvider) GetUserName() string {
 
 func (p *DockerForDesktopClusterProvider) GetNamespace(env *model.Environment) string {
 	return env.KubeNamespace
+}
+
+func (p *DockerForDesktopClusterProvider) LookupValueFrom(valueRef *model.ChartValueRef) (string, bool, error) {
+	return "", false, fmt.Errorf("not yet implemented for Docker")
 }

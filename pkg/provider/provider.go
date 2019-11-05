@@ -27,6 +27,7 @@ type ClusterProvider interface {
 	GetClusterName() string
 	GetUserName() string
 	GetNamespace(environment *model.Environment) string
+	LookupValueFrom(valueRef *model.ChartValueRef) (string, bool, error)
 }
 
 type baseClusterProvider struct {
@@ -39,7 +40,7 @@ func GetClusterProvider(cluster *model.Cluster, gitlabMode bool) (ClusterProvide
 	case gitlabMode:
 		provider = &GitlabClusterProvider{baseClusterProvider{cluster}}
 	case cluster.Provider.GKE != nil:
-		provider = &GkeClusterProvider{baseClusterProvider{cluster}}
+		provider = &GkeClusterProvider{baseClusterProvider: baseClusterProvider{cluster}}
 	case cluster.Provider.AKS != nil:
 		provider = &AksClusterProvider{baseClusterProvider{cluster}}
 	case cluster.Provider.Minikube != nil:

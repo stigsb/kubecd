@@ -17,7 +17,11 @@
 
 package provider
 
-import "github.com/kubecd/kubecd/pkg/model"
+import (
+	"fmt"
+
+	"github.com/kubecd/kubecd/pkg/model"
+)
 
 type GitlabClusterProvider struct{ baseClusterProvider }
 
@@ -35,4 +39,8 @@ func (p *GitlabClusterProvider) GetNamespace(env *model.Environment) string {
 
 func (p *GitlabClusterProvider) GetClusterInitCommands() ([][]string, error) {
 	return [][]string{}, nil
+}
+
+func (p *GitlabClusterProvider) LookupValueFrom(valueRef *model.ChartValueRef) (string, bool, error) {
+	return "", false, fmt.Errorf("not implemented for Gitlab")
 }

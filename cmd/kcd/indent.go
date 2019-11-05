@@ -17,16 +17,14 @@
 package main
 
 import (
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
 	"io/ioutil"
-	"os"
-	"path"
 
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-)
+	"gopkg.in/yaml.v3"
 
-const indentLevel = 2
+	"github.com/kubecd/kubecd/pkg/updates"
+)
 
 // indentCmd represents the indent command
 var indentCmd = &cobra.Command{
@@ -45,7 +43,7 @@ var indentCmd = &cobra.Command{
 			if err != nil {
 				return errors.Wrapf(err, `error decoding yaml in %q`, file)
 			}
-			if err = writeIndentedYamlToFile(file, &doc); err != nil {
+			if err = updates.WriteIndentedYamlToFile(file, &doc); err != nil {
 				return err
 			}
 		}
@@ -55,22 +53,4 @@ var indentCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(indentCmd)
-}
-
-func writeIndentedYamlToFile(fileName string, v *yaml.Node) error {
-	tmpFile, err := ioutil.TempFile(path.Dir(fileName), path.Base(fileName)+"*")
-	if err != nil {
-		return errors.Wrapf(err, `error creating tmpfile for %q`, fileName)
-	}
-	//noinspection GoDeferInLoop
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-	encoder := yaml.NewEncoder(tmpFile)
-	encoder.SetIndent(indentLevel)
-	if err = encoder.Encode(v); err != nil {
-		return errors.Wrapf(err, `error re-encoding `)
-	}
-	if err = os.Rename(tmpFile.Name(), fileName); err != nil {
-		return errors.Wrapf(err, `error renaming %q to %q`, tmpFile.Name(), fileName)
-	}
-	return nil
 }
