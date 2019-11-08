@@ -25,7 +25,6 @@ import (
 
 var useDryRun bool
 
-// useCmd represents the use command
 var useCmd = &cobra.Command{
 	Use:   "use {ENV}",
 	Short: "switch kube context to the specified environment",

@@ -25,7 +25,6 @@ import (
 	"os"
 )
 
-// json2yamlCmd represents the json2yaml command
 var json2yamlCmd = &cobra.Command{
 	Use:   "json2yaml",
 	Short: "JSON to YAML conversion utility (stdin/stdout)",

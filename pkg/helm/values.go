@@ -33,7 +33,7 @@ import (
 	"github.com/kubecd/kubecd/pkg/provider"
 )
 
-var runner exec.Runner = exec.RealRunner{}
+var runner exec.Runner = &exec.RealRunner{}
 
 func pathExists(path string) bool {
 	if _, err := os.Stat(path); err != nil {
@@ -150,7 +150,7 @@ func TemplateCommands(env *model.Environment, limitToReleases []string) ([][]str
 		if len(limitToReleases) == 0 || stringInSlice(release.Name, limitToReleases) {
 			relFile := release.FromFile
 			if release.Chart != nil {
-				tmp, err := GenerateTemplateCommands(release, env)
+				tmp, err := GenerateTemplateCommands(release)
 				if err != nil {
 					return nil, err
 				}
@@ -185,8 +185,9 @@ func formatSetValuesString(values []model.ChartValue, env *model.Environment, sk
 	return strings.Join(tmp, ","), nil
 }
 
-func GenerateHelmValuesArgv(rel *model.Release, env *model.Environment) ([]string, error) {
+func GenerateHelmValuesArgv(rel *model.Release) ([]string, error) {
 	var argv []string
+	env := rel.Environment
 	if !rel.SkipDefaultValues {
 		if env.DefaultValuesFile != "" {
 			argv = append(argv, "--values", rel.AbsPath(env.DefaultValuesFile))
@@ -223,15 +224,15 @@ func GenerateHelmChartArgs(rel *model.Release) ([]string, error) {
 	return []string{*rel.Chart.Reference, "--version", *rel.Chart.Version}, nil
 }
 
-func GenerateHelmDiffArgv(rel *model.Release, env *model.Environment) ([]string, error) {
-	argv := GenerateHelmBaseArgv(env)
+func GenerateHelmDiffArgv(rel *model.Release) ([]string, error) {
+	argv := GenerateHelmBaseArgv(rel.Environment)
 	argv = append(argv, "diff", "upgrade", rel.Name)
 	chartArgs, err := GenerateHelmChartArgs(rel)
 	if err != nil {
 		return []string{}, err
 	}
 	argv = append(argv, chartArgs...)
-	valueArgs, err := GenerateHelmValuesArgv(rel, env)
+	valueArgs, err := GenerateHelmValuesArgv(rel)
 	if err != nil {
 		return []string{}, err
 	}
@@ -239,9 +240,10 @@ func GenerateHelmDiffArgv(rel *model.Release, env *model.Environment) ([]string,
 	return argv, nil
 }
 
-func GenerateTemplateCommands(rel *model.Release, env *model.Environment) ([][]string, error) {
+func GenerateTemplateCommands(rel *model.Release) ([][]string, error) {
 	var commands [][]string
 	var tmpDir string
+	env := rel.Environment
 	if rel.Chart.Reference != nil {
 		reference := *rel.Chart.Reference
 		version := *rel.Chart.Version
@@ -264,7 +266,7 @@ func GenerateTemplateCommands(rel *model.Release, env *model.Environment) ([][]s
 	chartArgs, err := GenerateHelmChartArgs(rel)
 	var valueArgs []string
 	if err == nil {
-		valueArgs, err = GenerateHelmValuesArgv(rel, env)
+		valueArgs, err = GenerateHelmValuesArgv(rel)
 	}
 	if err != nil {
 		return [][]string{}, err
@@ -289,7 +291,7 @@ func GenerateHelmApplyArgv(rel *model.Release, env *model.Environment, dryRun, d
 	if err != nil {
 		return []string{}, err
 	}
-	valueArgs, err := GenerateHelmValuesArgv(rel, env)
+	valueArgs, err := GenerateHelmValuesArgv(rel)
 	if err != nil {
 		return []string{}, err
 	}

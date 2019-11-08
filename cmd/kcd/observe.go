@@ -35,12 +35,11 @@ var (
 	observeVerify   bool
 )
 
-// observeCmd represents the observe command
 var observeCmd = &cobra.Command{
 	Use:   "observe [ENV]",
 	Short: "observe a new version of an image or chart",
 	Long:  ``,
-	Args:  matchAll(cobra.RangeArgs(0, 1), imageOrChart(&observeImage, &observeChart)),
+	Args:  matchAllArgs(cobra.RangeArgs(0, 1), imageOrChart(&observeImage, &observeChart)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		kcdConfig, err := model.NewConfigFromFile(environmentsFile)
 		if err != nil {

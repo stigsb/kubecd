@@ -17,11 +17,10 @@
 package main
 
 import (
-	"github.com/kubecd/kubecd/pkg/helm"
-	"github.com/kubecd/kubecd/pkg/model"
-	"github.com/kubecd/kubecd/pkg/provider"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+
+	"github.com/kubecd/kubecd/pkg/model"
+	"github.com/kubecd/kubecd/pkg/operations"
 )
 
 var initCluster string
@@ -29,7 +28,6 @@ var initContextsOnly bool
 var initDryRun bool
 var initGitlabMode bool
 
-// initCmd represents the init command
 var initCmd = &cobra.Command{
 	Use:   "init [ENV]",
 	Short: "Initialize credentials and contexts",
@@ -40,18 +38,13 @@ var initCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cmds := helm.RepoSetupCommands(kcdConfig.HelmRepos)
-		envsToInit, err := environmentsFromArgs(kcdConfig, initCluster, args)
+		ops, err := buildInitOperations(kcdConfig, initCluster, initDryRun, initGitlabMode, args)
 		if err != nil {
 			return err
 		}
-		initCmds, err := commandsToInit(envsToInit, initGitlabMode)
-		if err != nil {
-			return err
-		}
-		cmds = append(cmds, initCmds...)
-		for _, argv := range cmds {
-			if err = runCommand(initDryRun, false, argv); err != nil {
+		for _, op := range ops {
+			//fmt.Println(op.String())
+			if err := op.Execute(); err != nil {
 				return err
 			}
 		}
@@ -67,44 +60,23 @@ func init() {
 	initCmd.Flags().BoolVar(&initGitlabMode, "gitlab", false, "grab kube config from GitLab environment")
 }
 
-func commandsToInit(envs []*model.Environment, gitlabMode bool) ([][]string, error) {
-	commands := make([][]string, 0)
-	clusterInitialized := make(map[string]bool)
-	for _, env := range envs {
-		cluster := env.GetCluster()
-		cp, err := provider.GetClusterProvider(cluster, gitlabMode)
-		if err != nil {
+func buildInitOperations(kcdConfig *model.KubeCDConfig, cluster string, dryRun, gitLab bool, args []string) ([]operations.Operation, error) {
+	envsToInit, err := environmentsFromArgs(kcdConfig, cluster, args)
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]operations.Operation, 0)
+	op := operations.NewHelmInit(kcdConfig, dryRun)
+	if err := op.Prepare(); err != nil {
+		return nil, err
+	}
+	ops = append(ops, op)
+	for _, env := range envsToInit {
+		op := operations.NewEnvInit(env, dryRun, gitLab)
+		if err := op.Prepare(); err != nil {
 			return nil, err
 		}
-		if _, initialized := clusterInitialized[cluster.Name]; !initialized {
-			cmds, err := cp.GetClusterInitCommands()
-			if err != nil {
-				return nil, err
-			}
-			commands = append(commands, cmds...)
-		}
-		clusterInitialized[cluster.Name] = true
-		commands = append(commands, provider.GetContextInitCommands(cp, env)...)
+		ops = append(ops, op)
 	}
-	return commands, nil
-}
-
-func clusterFlagOrEnvArg(clusterFlag *string) cobra.PositionalArgs {
-	return func(cmd *cobra.Command, args []string) error {
-		if *clusterFlag == "" && len(args) != 1 {
-			return errors.New("specify --cluster flag or ENV arg")
-		}
-		return nil
-	}
-}
-
-func matchAll(checks ...cobra.PositionalArgs) cobra.PositionalArgs {
-	return func(cmd *cobra.Command, args []string) error {
-		for _, check := range checks {
-			if err := check(cmd, args); err != nil {
-				return err
-			}
-		}
-		return nil
-	}
+	return ops, nil
 }

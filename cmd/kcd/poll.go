@@ -31,18 +31,17 @@ var (
 	pollCluster  string
 )
 
-// pollCmd represents the poll command
 var pollCmd = &cobra.Command{
 	Use:   "poll",
 	Short: "poll for new images in registries",
 	Long:  ``,
-	Args:  matchAll(cobra.RangeArgs(0, 1), clusterFlagOrEnvArg(&pollCluster)),
+	Args:  matchAllArgs(cobra.RangeArgs(0, 1), clusterFlagOrEnvArg(&pollCluster)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		kcdConfig, err := model.NewConfigFromFile(environmentsFile)
 		if err != nil {
 			return err
 		}
-		releaseFilters := makePollReleaseFilters(cmd, args)
+		releaseFilters := makeReleaseFilters(args, pollCluster, pollReleases, pollImage)
 		imageIndex, err := updates.ImageReleaseIndex(kcdConfig, releaseFilters...)
 		if err != nil {
 			return err
@@ -71,22 +70,6 @@ var pollCmd = &cobra.Command{
 		}
 		return nil
 	},
-}
-
-func makePollReleaseFilters(cmd *cobra.Command, args []string) []updates.ReleaseFilterFunc {
-	filters := make([]updates.ReleaseFilterFunc, 0)
-	if pollCluster != "" {
-		filters = append(filters, updates.ClusterReleaseFilter(pollCluster))
-	} else {
-		filters = append(filters, updates.EnvironmentReleaseFilter(args[0]))
-	}
-	if len(pollReleases) > 0 {
-		filters = append(filters, updates.ReleaseFilter(pollReleases))
-	}
-	if pollImage != "" {
-		filters = append(filters, updates.ImageReleaseFilter(pollImage))
-	}
-	return filters
 }
 
 func init() {

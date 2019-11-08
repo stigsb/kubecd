@@ -17,16 +17,18 @@
 package main
 
 import (
-	"github.com/kubecd/kubecd/pkg/helm"
-	"github.com/kubecd/kubecd/pkg/model"
+	"fmt"
+
 	"github.com/spf13/cobra"
+
+	"github.com/kubecd/kubecd/pkg/model"
+	"github.com/kubecd/kubecd/pkg/operations"
 )
 
 var (
 	renderDryRun   bool
 	renderReleases []string
 	renderCluster  string
-	renderInit     bool
 	renderGitlab   bool
 )
 
@@ -40,44 +42,18 @@ var renderCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		envsToApply, err := environmentsToApply(kcdConfig, args)
+		ops, err := buildRenderOperations(kcdConfig, args)
 		if err != nil {
 			return err
 		}
-		commandsToRun, err := commandsToRender(envsToApply)
-		if err != nil {
-			return err
-		}
-		for _, argv := range commandsToRun {
-			if err = runCommand(renderDryRun, false, argv); err != nil {
-				return err
-			}
+		for _, op := range ops {
+			fmt.Println(op.String())
+			//if err := op.Execute(); err != nil {
+			//	return err
+			//}
 		}
 		return nil
 	},
-}
-
-func commandsToRender(envsToApply []*model.Environment) ([][]string, error) {
-	commandsToRun := make([][]string, 0)
-	for _, env := range envsToApply {
-		if renderInit {
-			initCmds, err := commandsToInit(envsToApply, renderGitlab)
-			if err != nil {
-				return nil, err
-			}
-			for _, cmd := range initCmds {
-				commandsToRun = append(commandsToRun, cmd)
-			}
-		}
-		deployCmds, err := helm.TemplateCommands(env, renderReleases)
-		if err != nil {
-			return nil, err
-		}
-		for _, cmd := range deployCmds {
-			commandsToRun = append(commandsToRun, cmd)
-		}
-	}
-	return commandsToRun, nil
 }
 
 func init() {
@@ -85,6 +61,36 @@ func init() {
 	renderCmd.Flags().BoolVarP(&renderDryRun, "dry-run", "n", false, "dry run mode, only print commands")
 	renderCmd.Flags().StringSliceVarP(&renderReleases, "releases", "r", []string{}, "generate template only these releases")
 	renderCmd.Flags().StringVarP(&renderCluster, "cluster", "c", "", "template all environments in CLUSTER")
-	renderCmd.Flags().BoolVar(&renderInit, "init", false, "initialize credentials and contexts")
 	renderCmd.Flags().BoolVar(&renderGitlab, "gitlab", false, "initialize in gitlab mode")
+}
+
+func buildRenderOperations(kcdConfig *model.KubeCDConfig, args []string) ([]operations.Operation, error) {
+	environments, err := environmentsFromArgs(kcdConfig, applyCluster, args)
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]operations.Operation, 0)
+	for _, env := range environments {
+		releases := make([]*model.Release, 0)
+		if len(renderReleases) > 0 {
+			for _, relName := range renderReleases {
+				release := env.GetRelease(relName)
+				if release == nil {
+					return nil, fmt.Errorf("no release named %q in environment %q", relName, env.Name)
+				}
+				releases = append(releases, release)
+			}
+		} else {
+			releases = append(releases, env.AllReleases()...)
+		}
+		for _, release := range releases {
+			op := operations.NewRender(release, renderDryRun)
+			if err := op.Prepare(); err != nil {
+				return nil, err
+			}
+			ops = append(ops, op)
+		}
+	}
+	return ops, nil
+
 }

@@ -25,7 +25,6 @@ import (
 	"os"
 )
 
-// yaml2jsonCmd represents the yaml2json command
 var yaml2jsonCmd = &cobra.Command{
 	Use:   "yaml2json",
 	Short: "YAML to JSON conversion utility (stdin/stdout)",
@@ -52,14 +51,4 @@ var yaml2jsonCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(yaml2jsonCmd)
-
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// yaml2jsonCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// yaml2jsonCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
