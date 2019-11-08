@@ -25,7 +25,6 @@ import (
 	"github.com/zedge/kubecd/pkg/updates"
 )
 
-// indentCmd represents the indent command
 var indentCmd = &cobra.Command{
 	Use:   "indent file [file...]",
 	Short: "canonically indent YAML files",

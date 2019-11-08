@@ -17,10 +17,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
-	"github.com/zedge/kubecd/pkg/helm"
+
 	"github.com/zedge/kubecd/pkg/model"
+	"github.com/zedge/kubecd/pkg/operations"
 )
 
 var applyReleases []string
@@ -30,7 +31,6 @@ var applyGitlab bool
 var applyDryRun bool
 var applyDebug bool
 
-// applyCmd represents the apply command
 var applyCmd = &cobra.Command{
 	Use:   "apply",
 	Short: "apply changes to Kubernetes",
@@ -41,67 +41,18 @@ var applyCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		envsToApply, err := environmentsToApply(kcdConfig, args)
+		ops, err := buildApplyOperations(kcdConfig, args)
 		if err != nil {
 			return err
 		}
-		commandsToRun, err := commandsToApply(envsToApply)
-		if err != nil {
-			return err
-		}
-		for _, argv := range commandsToRun {
-			if err = runCommand(false, false, argv); err != nil {
+		for _, op := range ops {
+			//fmt.Println(op.String())
+			if err := op.Execute(); err != nil {
 				return err
 			}
 		}
 		return nil
 	},
-}
-
-func commandsToApply(envsToApply []*model.Environment) ([][]string, error) {
-	commandsToRun := make([][]string, 0)
-	for _, env := range envsToApply {
-		if applyInit {
-			initCmds, err := commandsToInit(envsToApply, applyGitlab)
-			if err != nil {
-				return nil, err
-			}
-			for _, cmd := range initCmds {
-				commandsToRun = append(commandsToRun, cmd)
-			}
-		}
-		deployCmds, err := helm.DeployCommands(env, applyDryRun, applyDebug, applyReleases)
-		if err != nil {
-			return nil, err
-		}
-		for _, cmd := range deployCmds {
-			commandsToRun = append(commandsToRun, cmd)
-		}
-	}
-	return commandsToRun, nil
-}
-
-func environmentsFromArgs(kcdConfig *model.KubeCDConfig, cluster string, args []string) ([]*model.Environment, error) {
-	if len(args) > 0 {
-		for _, envName := range args {
-			env := kcdConfig.GetEnvironment(envName)
-			if env == nil {
-				return nil, fmt.Errorf(`unknown environment: %q`, envName)
-			}
-			return []*model.Environment{env}, nil
-		}
-	}
-	if cluster == "" {
-		return nil, errors.New(`specify --cluster flag or ENV arg`)
-	}
-	if !kcdConfig.HasCluster(cluster) {
-		return nil, fmt.Errorf(`unknown cluster: %q`, cluster)
-	}
-	return kcdConfig.GetEnvironmentsInCluster(cluster), nil
-}
-
-func environmentsToApply(kcdConfig *model.KubeCDConfig, args []string) ([]*model.Environment, error) {
-	return environmentsFromArgs(kcdConfig, applyCluster, args)
 }
 
 func init() {
@@ -112,4 +63,41 @@ func init() {
 	applyCmd.Flags().StringVarP(&applyCluster, "cluster", "c", "", "apply all environments in CLUSTER")
 	applyCmd.Flags().BoolVar(&applyInit, "init", false, "initialize credentials and contexts")
 	applyCmd.Flags().BoolVar(&applyGitlab, "gitlab", false, "initialize in gitlab mode")
+}
+
+func buildApplyOperations(kcdConfig *model.KubeCDConfig, args []string) ([]operations.Operation, error) {
+	environments, err := environmentsFromArgs(kcdConfig, applyCluster, args)
+	if err != nil {
+		return nil, err
+	}
+	ops := make([]operations.Operation, 0)
+	if applyInit {
+		initOps, err := buildInitOperations(kcdConfig, applyCluster, applyDryRun, applyGitlab, args)
+		if err != nil {
+			return nil, err
+		}
+		ops = append(ops, initOps...)
+	}
+	for _, env := range environments {
+		releases := make([]*model.Release, 0)
+		if len(applyReleases) > 0 {
+			for _, relName := range applyReleases {
+				release := env.GetRelease(relName)
+				if release == nil {
+					return nil, fmt.Errorf("no release named %q in environment %q", relName, env.Name)
+				}
+				releases = append(releases, release)
+			}
+		} else {
+			releases = append(releases, env.AllReleases()...)
+		}
+		for _, release := range releases {
+			op := operations.NewApply(release, applyDryRun, applyDebug)
+			if err := op.Prepare(); err != nil {
+				return nil, err
+			}
+			ops = append(ops, op)
+		}
+	}
+	return ops, nil
 }

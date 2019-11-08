@@ -16,19 +16,18 @@ type Runner interface {
 
 type RealRunner struct{}
 
-func (r RealRunner) RunContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+func (r *RealRunner) RunContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
 	return osexec.CommandContext(ctx, cmd, args...).Output()
 }
 
-func (r RealRunner) Run(cmd string, args ...string) ([]byte, error) {
+func (r *RealRunner) Run(cmd string, args ...string) ([]byte, error) {
 	return osexec.Command(cmd, args...).Output()
 }
 
-
 func NewCachedRunner(ttl time.Duration) *CachedRunner {
 	return &CachedRunner{
-		cache:   make(map[string]cachedEntry),
-		ttl:     ttl,
+		cache: make(map[string]cachedEntry),
+		ttl:   ttl,
 	}
 }
 
@@ -43,11 +42,11 @@ type CachedRunner struct {
 	ttl     time.Duration
 }
 
-func (r CachedRunner) Run(cmd string, args ...string) ([]byte, error) {
+func (r *CachedRunner) Run(cmd string, args ...string) ([]byte, error) {
 	return r.RunContext(context.Background(), cmd, args...)
 }
 
-func (r CachedRunner) RunContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+func (r *CachedRunner) RunContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
 	r.cacheMu.Lock()
 	defer r.cacheMu.Unlock()
 	key := fmt.Sprintf("%s %s", cmd, strings.Join(args, " "))

@@ -10,7 +10,7 @@ import (
 
 var zoneToRegionRegexp = regexp.MustCompile(`-[a-z]$`)
 
-type GkeClusterProvider struct { baseClusterProvider }
+type GkeClusterProvider struct{ baseClusterProvider }
 
 func (p *GkeClusterProvider) GetClusterInitCommands() ([][]string, error) {
 	gcloudCommand := []string{

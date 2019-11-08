@@ -10,4 +10,3 @@ import (
 func TestHelperProcess(t *testing.T) {
 	exec.InsideHelperProcess()
 }
-
