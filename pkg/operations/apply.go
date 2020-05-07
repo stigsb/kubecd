@@ -3,12 +3,12 @@ package operations
 import (
 	"strings"
 
-	"github.com/zedge/kubecd/pkg/helm"
-	"github.com/zedge/kubecd/pkg/model"
+	"github.com/kubecd/kubecd/pkg/helm"
+	"github.com/kubecd/kubecd/pkg/model"
 )
 
 type Apply struct {
-	*Base
+	*CommandBase
 	Release *model.Release
 	Debug   bool
 }
@@ -30,13 +30,13 @@ func (o Apply) String() string {
 	builder.WriteString("\",Release=\"")
 	builder.WriteString(o.Release.Name)
 	builder.WriteString("\") {\n")
-	builder.WriteString(o.Base.String())
+	builder.WriteString(o.CommandBase.String())
 	builder.WriteString("}")
 	return builder.String()
 }
 
 func (o *Apply) prepareForHelmChart() error {
-	cmd, err := helm.GenerateHelmApplyArgv(o.Release, o.Release.Environment, o.DryRun, o.Debug)
+	cmd, err := helm.GenerateHelmApplyArgv(o.Release, o.DryRun, o.Debug)
 	if err != nil {
 		return err
 	}
@@ -65,9 +65,9 @@ func (o *Apply) prepareForResourceFiles() error {
 
 func NewApply(release *model.Release, dryRun, debug bool) *Apply {
 	return &Apply{
-		Base:    newBase(dryRun),
-		Release: release,
-		Debug:   debug,
+		CommandBase: NewCommandBase(dryRun),
+		Release:     release,
+		Debug:       debug,
 	}
 }
 

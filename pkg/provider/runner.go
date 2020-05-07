@@ -3,7 +3,7 @@ package provider
 import (
 	"time"
 
-	"github.com/zedge/kubecd/pkg/exec"
+	"github.com/kubecd/kubecd/pkg/exec"
 )
 
 var cachedRunner exec.Runner = exec.NewCachedRunner(10 * time.Minute)

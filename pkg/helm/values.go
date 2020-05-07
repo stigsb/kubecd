@@ -120,17 +120,16 @@ func DeployCommands(env *model.Environment, dryRun, debug bool, limitToReleases 
 	}
 	for _, release := range env.AllReleases() {
 		if len(limitToReleases) == 0 || stringInSlice(release.Name, limitToReleases) {
-			relFile := release.FromFile
 			if release.Chart != nil {
-				tmp, err := GenerateHelmApplyArgv(release, env, dryRun, debug)
+				tmp, err := GenerateHelmApplyArgv(release, dryRun, debug)
 				if err != nil {
 					return nil, err
 				}
 				commands = append(commands, tmp)
 			} else if release.ResourceFiles != nil {
 				absFiles := make([]string, len(release.ResourceFiles))
-				for i, path := range release.ResourceFiles {
-					absFiles[i] = model.ResolvePathFromFile(path, relFile)
+				for i, resFilePath := range release.ResourceFiles {
+					absFiles[i] = model.ResolvePathFromFile(resFilePath, release.FromFile)
 				}
 				commands = append(commands, KubectlApplyCommand(absFiles, dryRun, env.Name))
 			}
@@ -286,7 +285,7 @@ func GenerateTemplateCommands(rel *model.Release) ([][]string, error) {
 	return commands, nil
 }
 
-func GenerateHelmApplyArgv(rel *model.Release, env *model.Environment, dryRun, debug bool) ([]string, error) {
+func GenerateHelmApplyArgv(rel *model.Release, dryRun, debug bool) ([]string, error) {
 	chartArgs, err := GenerateHelmChartArgs(rel)
 	if err != nil {
 		return []string{}, err
@@ -295,10 +294,10 @@ func GenerateHelmApplyArgv(rel *model.Release, env *model.Environment, dryRun, d
 	if err != nil {
 		return []string{}, err
 	}
-	argv := GenerateHelmBaseArgv(env)
+	argv := GenerateHelmBaseArgv(rel.Environment)
 	argv = append(argv, "upgrade", rel.Name)
 	argv = append(argv, chartArgs...)
-	argv = append(argv, "-i", "--namespace", env.KubeNamespace)
+	argv = append(argv, "-i", "--namespace", rel.Environment.KubeNamespace)
 	argv = append(argv, valueArgs...)
 	if dryRun {
 		argv = append(argv, "--dry-run")

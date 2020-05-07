@@ -9,6 +9,12 @@ clusters:
         project: kubecd-demo
         clusterName: demo-cluster
         zone: europe-north1-a
+  - name: cluster2
+    provider:
+      gke:
+        project: kubecd-demo
+        clusterName: demo-cluster
+        zone: europe-north1-a
 
 environments:
   - name: kube-system
@@ -38,3 +44,14 @@ environments:
         value: "eu.gcr.io/kubecd-demo/prod-"
       - key: "ingress.domain"
         value: "prod.kubecd.io"
+
+  - name: test2
+    clusterName: cluster2
+    kubeNamespace: test
+    releasesFiles:
+      - releases-test.yaml
+    defaultValues:
+      - key: "image.prefix"
+        value: "eu.gcr.io/kubecd-demo/test-"
+      - key: "ingress.domain"
+        value: "test2.kubecd.io"

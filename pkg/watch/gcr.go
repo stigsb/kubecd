@@ -9,7 +9,7 @@ import (
 
 	"cloud.google.com/go/pubsub"
 
-	"github.com/zedge/kubecd/pkg/image"
+	"github.com/kubecd/kubecd/pkg/image"
 )
 
 // {

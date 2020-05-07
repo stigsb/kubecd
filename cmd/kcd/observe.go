@@ -18,6 +18,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/kubecd/kubecd/pkg/operations"
 	"regexp"
 
 	"github.com/spf13/cobra"
@@ -30,6 +31,7 @@ import (
 var (
 	observePatch    bool
 	observeReleases []string
+	observeCluster  string
 	observeImage    string
 	observeChart    string
 	observeVerify   bool
@@ -39,52 +41,39 @@ var observeCmd = &cobra.Command{
 	Use:   "observe [ENV]",
 	Short: "observe a new version of an image or chart",
 	Long:  ``,
-	Args:  matchAllArgs(cobra.RangeArgs(0, 1), imageOrChart(&observeImage, &observeChart)),
+	Args:  matchAllArgs(clusterFlagOrEnvArg(&observeCluster), imageOrChart(&observeImage, &observeChart)),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		kcdConfig, err := model.NewConfigFromFile(environmentsFile)
 		if err != nil {
 			return err
 		}
-		if observeImage != "" {
-			return observeImageTag(kcdConfig, cmd, args)
+		ops, err := buildObserveOperations(kcdConfig, args)
+		if err != nil {
+			return err
 		}
-		return observeChartVersion(kcdConfig)
+		for _, op := range ops {
+			//fmt.Println(op.String())
+			if err := op.Execute(); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(observeCmd)
-	observeCmd.Flags().StringVarP(&observeImage, "image", "i", "", "a new image, including tag")
-	observeCmd.Flags().StringSliceVarP(&observeReleases, "releases", "r", []string{}, "limit the update to or more specific releases")
-	observeCmd.Flags().StringVar(&observeChart, "chart", "", "a new chart version, format: REPO/CHART:VERSION")
-	observeCmd.Flags().BoolVar(&observePatch, "patch", false, "patch release files with updated tags")
-	observeCmd.Flags().BoolVar(&observeVerify, "verify", false, "verify that image:tag exists")
-}
-
-func observeVerifyImage(imageRepo string) error {
-	imageRef := image.NewDockerImageRef(imageRepo)
-	existingTags, err := image.GetTagsForDockerImage(imageRepo)
-	if err != nil {
-		return err
-	}
-	for _, tsTag := range existingTags {
-		if tsTag.Tag == imageRef.Tag {
-			return nil
-		}
-	}
-	return fmt.Errorf(`tag %q not found for imageRepo %q`, imageRef.Tag, imageRef.WithoutTag())
-}
-
-func observeImageTag(kcdConfig *model.KubeCDConfig, cmd *cobra.Command, args []string) error {
+func buildObserveOperations(kcdConfig *model.KubeCDConfig, args []string) ([]operations.Operation, error) {
+	//environments, err := environmentsFromArgs(kcdConfig, observeCluster, args)
+	//if err != nil {
+	//	return nil, err
+	//}
+	ops := make([]operations.Operation, 0)
 	if observeVerify {
-		if err := observeVerifyImage(observeImage); err != nil {
-			return err
-		}
+		ops = append(ops, &operations.VerifyImage{Image: observeImage})
 	}
 	releaseFilters := makeObserveReleaseFilters(args)
 	imageIndex, err := updates.ImageReleaseIndex(kcdConfig, releaseFilters...)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	newImage := image.NewDockerImageRef(observeImage)
 	imageTags := updates.BuildTagIndexFromNewImageRef(newImage, imageIndex)
@@ -92,22 +81,43 @@ func observeImageTag(kcdConfig *model.KubeCDConfig, cmd *cobra.Command, args []s
 	for _, release := range imageIndex[newImage.WithoutTag()] {
 		imageUpdates, err := updates.FindImageUpdatesForRelease(release, imageTags)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		allUpdates = append(allUpdates, imageUpdates...)
 	}
 	if len(allUpdates) == 0 {
 		fmt.Printf("No matching release found for image %s.\n", observeImage)
-		return nil
+		noOps := make([]operations.Operation, 0)
+		return noOps, nil
 	}
-	if err = patchReleasesFilesMaybe(allUpdates, observePatch); err != nil {
-		return err
+	verb := "May"
+	if observePatch {
+		verb = "Will"
 	}
-	return nil
+	for _, update := range allUpdates {
+		fmt.Printf("%s update env %q release %q image %q tag %q -> %q\n", verb, update.Release.Environment.Name, update.Release.Name, update.ImageRepo, update.OldTag, update.NewTag)
+		if observePatch {
+			ops = append(ops, operations.NewPatchReleaseFile(update))
+		}
+	}
+	return ops, nil
+}
+
+func init() {
+	rootCmd.AddCommand(observeCmd)
+	observeCmd.Flags().StringVarP(&observeImage, "image", "i", "", "a new image, including tag")
+	observeCmd.Flags().StringSliceVarP(&observeReleases, "releases", "r", []string{}, "limit the update to or more specific releases")
+	observeCmd.Flags().StringVarP(&observeCluster, "cluster", "c", "", "look for updates in all environments in CLUSTER")
+	observeCmd.Flags().StringVar(&observeChart, "chart", "", "a new chart version, format: REPO/CHART:VERSION")
+	observeCmd.Flags().BoolVar(&observePatch, "patch", false, "patch release files with updated tags")
+	observeCmd.Flags().BoolVar(&observeVerify, "verify", false, "verify that image:tag exists")
 }
 
 func makeObserveReleaseFilters(args []string) []updates.ReleaseFilterFunc {
 	filters := make([]updates.ReleaseFilterFunc, 0)
+	if observeCluster != "" {
+		filters = append(filters, updates.ClusterReleaseFilter(observeCluster))
+	}
 	if len(observeReleases) > 0 {
 		filters = append(filters, updates.ReleaseFilter(observeReleases))
 	}
@@ -126,7 +136,7 @@ func patchReleasesFilesMaybe(imageUpdates []updates.ImageUpdate, patch bool) err
 		verb = "Will"
 	}
 	for _, update := range imageUpdates {
-		fmt.Printf("%s update release %q image %q tag %s -> %s\n", verb, update.Release.Name, update.ImageRepo, update.OldTag, update.NewTag)
+		fmt.Printf("%s update env %q release %q image %q tag %q -> %q\n", verb, update.Release.Environment.Name, update.Release.Name, update.ImageRepo, update.OldTag, update.NewTag)
 	}
 	if patch {
 		for file, fileUpdates := range updates.GroupImageUpdatesByReleasesFile(imageUpdates) {

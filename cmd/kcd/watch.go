@@ -22,10 +22,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/zedge/kubecd/pkg/image"
-	"github.com/zedge/kubecd/pkg/model"
-	"github.com/zedge/kubecd/pkg/updates"
-	"github.com/zedge/kubecd/pkg/watch"
+	"github.com/kubecd/kubecd/pkg/image"
+	"github.com/kubecd/kubecd/pkg/model"
+	"github.com/kubecd/kubecd/pkg/updates"
+	"github.com/kubecd/kubecd/pkg/watch"
 )
 
 var (

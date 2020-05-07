@@ -74,6 +74,10 @@ func TestGenerateHelmApplyArgv(t *testing.T) {
 	releaseName := "cert-manager"
 	envName := "kube-system"
 	envNamespace := "kube-system"
+	env := &model.Environment{
+		Name:          envName,
+		KubeNamespace: envNamespace,
+	}
 	release := &model.Release{
 		Name: releaseName,
 		Chart: &model.Chart{
@@ -84,14 +88,11 @@ func TestGenerateHelmApplyArgv(t *testing.T) {
 		Triggers: []model.ReleaseUpdateTrigger{
 			{Chart: &model.HelmTrigger{Track: semver.TrackMinorVersion}},
 		},
-		FromFile: releaseFile,
-	}
-	env := &model.Environment{
-		Name:          envName,
-		KubeNamespace: envNamespace,
+		FromFile:    releaseFile,
+		Environment: env,
 	}
 	t.Run("release values file only", func(t *testing.T) {
-		cmds, err := GenerateHelmApplyArgv(release, env, false, false)
+		cmds, err := GenerateHelmApplyArgv(release, false, false)
 		assert.NoError(t, err)
 		assert.Equal(t,
 			[]string{
@@ -103,7 +104,7 @@ func TestGenerateHelmApplyArgv(t *testing.T) {
 	})
 	t.Run("env and release values files", func(t *testing.T) {
 		env.DefaultValuesFile = "/tmp/env-values.yaml"
-		cmds, err := GenerateHelmApplyArgv(release, env, false, false)
+		cmds, err := GenerateHelmApplyArgv(release, false, false)
 		assert.NoError(t, err)
 		assert.Equal(t,
 			[]string{
@@ -115,7 +116,7 @@ func TestGenerateHelmApplyArgv(t *testing.T) {
 	t.Run("env values and release values file", func(t *testing.T) {
 		env.DefaultValuesFile = ""
 		env.DefaultValues = []model.ChartValue{{Key: "foo", Value: "bar"}}
-		cmds, err := GenerateHelmApplyArgv(release, env, false, false)
+		cmds, err := GenerateHelmApplyArgv(release, false, false)
 		assert.NoError(t, err)
 		assert.Equal(t,
 			[]string{
@@ -127,7 +128,7 @@ func TestGenerateHelmApplyArgv(t *testing.T) {
 	t.Run("release values file and values", func(t *testing.T) {
 		env.DefaultValues = nil
 		release.Values = []model.ChartValue{{Key: "baz", Value: "gazonk"}}
-		cmds, err := GenerateHelmApplyArgv(release, env, false, false)
+		cmds, err := GenerateHelmApplyArgv(release, false, false)
 		assert.NoError(t, err)
 		assert.Equal(t,
 			[]string{

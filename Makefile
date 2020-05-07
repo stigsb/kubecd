@@ -15,6 +15,7 @@ image-push: image
 
 clean:
 	go clean ./...
+	rm -f kcd
 
 fmt:
 	@if ! test -z `gofmt -s -l cmd pkg`; then \

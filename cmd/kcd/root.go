@@ -28,8 +28,8 @@ import (
 	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/viper"
 
-	"github.com/zedge/kubecd/pkg/model"
-	"github.com/zedge/kubecd/pkg/updates"
+	"github.com/kubecd/kubecd/pkg/model"
+	"github.com/kubecd/kubecd/pkg/updates"
 )
 
 var cfgFile string

@@ -3,12 +3,12 @@ package operations
 import (
 	"strings"
 
-	"github.com/zedge/kubecd/pkg/helm"
-	"github.com/zedge/kubecd/pkg/model"
+	"github.com/kubecd/kubecd/pkg/helm"
+	"github.com/kubecd/kubecd/pkg/model"
 )
 
 type Render struct {
-	*Base
+	*CommandBase
 	Release *model.Release
 }
 
@@ -50,15 +50,15 @@ func (o Render) String() string {
 	builder.WriteString("\", Release=\"")
 	builder.WriteString(o.Release.Name)
 	builder.WriteString("\") {\n")
-	builder.WriteString(o.Base.String())
+	builder.WriteString(o.CommandBase.String())
 	builder.WriteString("}")
 	return builder.String()
 }
 
 func NewRender(release *model.Release, dryRun bool) *Render {
 	return &Render{
-		Base:    newBase(dryRun),
-		Release: release,
+		CommandBase: NewCommandBase(dryRun),
+		Release:     release,
 	}
 }
 
